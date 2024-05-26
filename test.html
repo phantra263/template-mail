@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>docyment</title>
+</head>
+
+<body>
+
+
+    <button id="downloadBtn">donload</button> // anh có thể tạo qya js luôn
+
+    <script>
+
+        // đoạn ni anh dùng for lấy từ attachmens ra
+        const mailAttachment = {
+            filename: 'Quản lý bán hàng.docx',
+            payload: '    mã base64 ở cho nay',
+            binary: true,
+            mail_content_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',  // sywa lại 
+            'content-id': '<f_lw6bco4j0>',  // sửa lại
+            'content-disposition': 'attachment; filename="=?UTF-8?B?UXXhuqNuIGzDvSBiw6FuIGjDoG5nLmRvY3g=?="', // sủa lại
+            charset: null,
+            content_transfer_encoding: 'base64'
+        };
+
+
+        function base64ToBlob(base64, contentType) {
+            const byteCharacters = atob(base64);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+                byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            return new Blob([byteArray], { type: contentType });
+        }
+
+
+        function createDownloadLink(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            return link;
+        }
+
+
+        document.getElementById('downloadBtn').addEventListener('click', () => {
+            const blob = base64ToBlob(mailAttachment.payload, mailAttachment.mail_content_type);
+            const link = createDownloadLink(blob, mailAttachment.filename);
+            link.click();
+            URL.revokeObjectURL(link.href); // này xóa cái blod đi cho đỡ nặng máy | tùy trường hợp mà sài
+        });
+    </script>
+</body>
+
+</html>
