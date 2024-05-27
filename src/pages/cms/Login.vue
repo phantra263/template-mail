@@ -19,8 +19,8 @@
             </a-form-item>
 
             <div class="form-control">
-                <button @click="flag()" type="button" class="btn-left" v-if="!flagSignUp">Sign Up</button>
-                <button @click="flag()" type="button" class="btn-left" v-else="flagSignUp">Sign In</button>
+                <!-- <button @click="flag()" type="button" class="btn-left" v-if="!flagSignUp">Sign Up</button>
+                <button @click="flag()" type="button" class="btn-left" v-else="flagSignUp">Sign In</button> -->
                 <button type="submit">Continute</button>
             </div>
         </a-form>
@@ -182,7 +182,7 @@ const resetFormValidation = () => {
         .form-control {
             display: flex;
             align-items: center;
-            justify-content: space-between;
+            justify-content: flex-end;
 
             button {
                 color: #627597;
