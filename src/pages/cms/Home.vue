@@ -94,6 +94,10 @@ watch(() => route.params.user,
     .ant-list-split .ant-list-item {
         border-radius: 5px;
 
+        @media screen and (max-width: 768px) {
+            padding: 5px;
+        }
+
         &:hover {
             background: #e7eaed;
         }

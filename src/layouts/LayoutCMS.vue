@@ -1,7 +1,8 @@
 <template>
     <a-layout class="layout-cms">
-        <a-layout-sider :trigger="null" collapsible class="custom-sider">
-            <router-link class="logo" to="/">LOGO</router-link>
+        <a-layout-sider :trigger="null" collapsible class="custom-sider" :class="{ 'show': flagMenu }">
+            <span class="close-menu-sp" :class="{ 'show': flagMenu }" @click="flagMenu = false">X</span>
+            <RouterLink class="logo" @click.prevent="flagMenu = false" to="'/">LOGO</RouterLink>
             <div style="padding: 10px;">
                 <a-button type="primary" class="btn-refresh" @click="refreshPage">
                     <SyncOutlined />Làm mới
@@ -11,21 +12,25 @@
             </div>
 
             <a-menu theme="dark" mode="inline">
-                <router-link v-for="(user, index) in listMail" class="ant-menu-item"
+                <RouterLink v-for="(user, index) in listMail" class="ant-menu-item"
                     :class="{ 'ant-menu-item-selected': (route.params.user == user && route.name == 'detail mail') }"
-                    exactActiveClass="ant-menu-item-selected" :to="{ path: `/mail/${user}` }" :key="index">
+                    exactActiveClass="ant-menu-item-selected" @click.prevent="flagMenu = false"
+                    :to="{ path: `/mail/${user}` }" :key="index">
                     <span>{{ user }}</span>
-                </router-link>
+                </RouterLink>
+                <InfiniteLoading @infinite="load" />
             </a-menu>
+
+
 
         </a-layout-sider>
         <a-layout class="content-right">
             <a-layout-header style="background: #fff; padding: 0">
                 <div class="wrap-header">
                     <div class="control-left">
-                        <MenuUnfoldOutlined class="menu-sp" v-if="flagMenu" @click="flagMenu = !flagMenu" />
+                        <MenuUnfoldOutlined class="menu-sp" @click="flagMenu = !flagMenu" />
                         <MailOutlined />
-                        <h2 v-if="currentMail">{{ currentMail }}</h2>
+                        <h2 v-if="currentMail" @click="copyText">{{ currentMail }}</h2>
                         <h2 v-else>Welcome to template mail</h2>
                     </div>
 
@@ -119,6 +124,7 @@
             </a-form>
         </a-spin>
     </ModalCMS>
+
 </template>
 <script setup>
 import {
@@ -137,6 +143,8 @@ import LoginSrv from '../services/CMS/auth.service';
 import ListMailSrv from '../services/CMS/mail.service';
 import ModalCMS from '../components/ModalCMS.vue';
 import { message } from 'ant-design-vue';
+import InfiniteLoading from "v3-infinite-loading";
+import "v3-infinite-loading/lib/style.css";
 
 
 const router = useRouter();
@@ -165,6 +173,19 @@ const handleLogout = async () => {
     router.push({ path: '/login' })
 }
 
+
+const copyText = (event) => {
+    const text = event.target.innerText;
+
+    // Copy text to clipboard
+    navigator.clipboard.writeText(text).then(() => {
+        console.log('Text copied to clipboard');
+        message.success('Copied!', 1);
+    }).catch(err => {
+        console.error('Could not copy text: ', err);
+    });
+};
+
 const getListMailName = async () => {
     try {
         const res = await ListMailSrv.getMailName(fetchParams);
@@ -176,6 +197,19 @@ const getListMailName = async () => {
     }
 };
 
+const load = async $state => {
+    try {
+        const res = await ListMailSrv.getMailName(fetchParams);
+        if (res.data.data.length < 10) $state.complete();
+        else {
+            listMail.value.push(...res.data.data);
+            $state.loaded();
+        }
+        fetchParams.page++;
+    } catch (error) {
+        $state.error();
+    }
+};
 
 const onFinish = async () => {
     loading.value = true;
@@ -183,7 +217,7 @@ const onFinish = async () => {
     try {
         const res = await ListMailSrv.createMail(mailName);
         if (res.data.msg == "success") {
-            getListMailName();
+            listMail.value.push(mailName);
             handleCloseModal();
             message.success('Tạo mail mới thành công!');
         }
@@ -206,7 +240,7 @@ const resetFormValidation = () => {
 };
 
 onMounted(() => {
-    getListMailName();
+    // getListMailName();
 });
 
 watch(() => route.params.user,
@@ -228,8 +262,55 @@ watch(() => route.params.user,
     height: 100vh;
     z-index: 10;
 
+    .close-menu-sp {
+        display: none;
+
+        @media screen and (max-width: 768px) {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            right: -40px;
+            padding: 15px;
+            border-radius: 50%;
+            background: #5f5959;
+            font-weight: bold;
+            top: 10px;
+            color: #fff;
+            cursor: pointer;
+        }
+
+        &.show {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+    }
+
     @media screen and (max-width: 768px) {
         transform: translateX(-100%);
+    }
+
+    &.show {
+        transform: translateX(0);
+        z-index: 10;
+
+        &::after {
+            content: '';
+            position: absolute;
+            width: 100vw;
+            left: 0;
+            top: 0;
+            height: 100%;
+            background: #a79f9fde;
+            z-index: -1;
+        }
+    }
+
+    .ant-menu {
+        max-height: calc(100vh - 170px);
+        // min-height: calc(100vh - 125px);
+        // max-height: 500px;
+        overflow-y: auto
     }
 
     .ant-menu-item {
@@ -237,13 +318,19 @@ watch(() => route.params.user,
     }
 }
 
-.ant-layout .ant-layout-header {
-    position: sticky;
-    left: 0;
-    top: 0;
-    background: #fff;
-    box-shadow: rgba(50, 50, 93, 0.25) 0px 2px 5px -1px, rgba(0, 0, 0, 0.3) 0px 1px 3px -1px;
-    z-index: 1;
+.ant-layout {
+    .ant-layout-header {
+        position: sticky;
+        left: 0;
+        top: 0;
+        background: #fff;
+        box-shadow: rgba(50, 50, 93, 0.25) 0px 2px 5px -1px, rgba(0, 0, 0, 0.3) 0px 1px 3px -1px;
+        z-index: 1;
+    }
+}
+
+:deep .custom-sider .ant-layout-sider-children {
+    background: #001529;
 }
 
 .trigger {
@@ -291,12 +378,28 @@ watch(() => route.params.user,
         h2 {
             color: #0061f1;
             font-size: 18px;
+            cursor: pointer;
+
+            @media screen and (max-width: 768px) {
+                font-size: 13px;
+            }
         }
 
         .anticon {
             font-size: 14px;
             margin: 5px 9px 0;
 
+            @media screen and (max-width: 768px) {
+                margin: 2px 5px 0 10px;
+            }
+        }
+
+        .menu-sp {
+            display: none;
+
+            @media screen and (max-width: 768px) {
+                display: inline-flex;
+            }
         }
     }
 

@@ -5,6 +5,10 @@ const auth = {
         return http.post(`/login`, data);
     },
 
+    register(data) {
+        return http.post(`/create-user`, data);
+    },
+
     logout() {
         return http.delete(`/logout`);
     }

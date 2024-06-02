@@ -109,6 +109,10 @@ onMounted(() => {
     display: flex;
     align-items: center;
 
+    @media screen and (max-width: 768px) {
+        padding: 10px 0 10px 0;
+    }
+
     .anticon {
         margin-right: 10px;
         cursor: pointer;

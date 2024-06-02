@@ -8,6 +8,9 @@
                 <br /> Let's create easy mail...
             </h1>
 
+            <h2 v-if="!flagSignUp">Login</h2>
+            <h2 v-else>Register</h2>
+
             <label for=" username">Enter your username*</label>
             <a-form-item name="usename" :rules="[{ required: true, message: 'Please input your username!' }]">
                 <a-input v-model:value="formState.usename" />
@@ -19,8 +22,8 @@
             </a-form-item>
 
             <div class="form-control">
-                <!-- <button @click="flag()" type="button" class="btn-left" v-if="!flagSignUp">Sign Up</button>
-                <button @click="flag()" type="button" class="btn-left" v-else="flagSignUp">Sign In</button> -->
+                <button @click="flag()" type="button" class="btn-left" v-if="!flagSignUp">Sign Up</button>
+                <button @click="flag()" type="button" class="btn-left" v-else="flagSignUp">Sign In</button>
                 <button type="submit">Continute</button>
             </div>
         </a-form>
@@ -43,14 +46,19 @@ import { message } from 'ant-design-vue';
 import LoginSrv from '../../services/CMS/auth.service';
 import axios from 'axios';
 
+const formRef = ref(null);
 const loading = ref(false);
 const flagSignUp = ref(false);
 const router = useRouter();
-const formState = reactive({
+const formState = ref({
     usename: '',
     password: ''
 });
 const onFinish = async (values) => {
+    flagSignUp.value ? register(values) : login(values);
+};
+
+const login = async (values) => {
     loading.value = true;
     try {
         const res = await LoginSrv.login(values);
@@ -62,19 +70,45 @@ const onFinish = async (values) => {
             axios.defaults.headers.common['Authorization'] = `Bearer ${res.data.data.access_token}`;
         }
     } catch (error) {
-        message.error('Sai thông tin đăng nhập');
-        console.error('Error fetching tag:', error);
+        if (error.response?.status == 401 && error.response?.data?.detail) {
+            message.error(error.response?.data?.detail?.msg)
+        } else {
+            message.error('Sai thông tin đăng nhập');
+        }
     } finally {
         loading.value = false;
         router.push({ path: '/' });
     }
-};
+}
+
+const register = async (values) => {
+    loading.value = true;
+    try {
+        const res = await LoginSrv.register(values);
+        if (res.data.msg == "success") {
+            message.success(res.data.data.message);
+            // chuyển qua màn hình login
+            flag();
+        }
+    } catch (error) {
+        console.error('Error fetching tag:', error);
+        if (error.response?.status == 422) {
+            message.error('Verification token successfully sent to your admin');
+            flag();
+        } else message.error('Request fail, please try again!')
+    } finally {
+        loading.value = false;
+    }
+}
+
 const flag = () => {
     flagSignUp.value = !flagSignUp.value;
     resetFormValidation();
 }
 
 const resetFormValidation = () => {
+    formState.value.username = '';
+    formState.value.password = '';
     const form = formRef.value;
     form.resetFields();
 };
@@ -161,6 +195,12 @@ const resetFormValidation = () => {
             display: block;
         }
 
+        h2 {
+            text-align: center;
+            color: #00cfc8;
+            font-size: 28px;
+        }
+
         label {
             color: #00cfc8;
             margin-bottom: 10px;
@@ -182,7 +222,7 @@ const resetFormValidation = () => {
         .form-control {
             display: flex;
             align-items: center;
-            justify-content: flex-end;
+            justify-content: space-between;
 
             button {
                 color: #627597;
