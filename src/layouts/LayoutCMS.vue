@@ -2,7 +2,7 @@
     <a-layout class="layout-cms">
         <a-layout-sider :trigger="null" collapsible class="custom-sider" :class="{ 'show': flagMenu }">
             <span class="close-menu-sp" :class="{ 'show': flagMenu }" @click="flagMenu = false">X</span>
-            <RouterLink class="logo" @click.prevent="flagMenu = false" to="'/">LOGO</RouterLink>
+            <RouterLink class="logo" @click.prevent="flagMenu = false" to="/">LOGO</RouterLink>
             <div style="padding: 10px;">
                 <a-button type="primary" class="btn-refresh" @click="refreshPage">
                     <SyncOutlined />Làm mới
@@ -18,7 +18,7 @@
                     :to="{ path: `/mail/${user}` }" :key="index">
                     <span>{{ user }}</span>
                 </RouterLink>
-                <InfiniteLoading @infinite="load" />
+                <InfiniteLoading @infinite="load" class="infinity-loading" />
             </a-menu>
 
 
@@ -200,8 +200,10 @@ const getListMailName = async () => {
 const load = async $state => {
     try {
         const res = await ListMailSrv.getMailName(fetchParams);
-        if (res.data.data.length < 10) $state.complete();
-        else {
+        if (res.data.data.length < 20) {
+            listMail.value.push(...res.data.data);
+            $state.complete();
+        } else {
             listMail.value.push(...res.data.data);
             $state.loaded();
         }
@@ -220,6 +222,7 @@ const onFinish = async () => {
             listMail.value.push(mailName);
             handleCloseModal();
             message.success('Tạo mail mới thành công!');
+            router.push({ path: `/mail/${mailName}` })
         }
     } catch (error) {
         console.error('Error fetching tag:', error.response?.data?.detail?.msg);
@@ -443,5 +446,9 @@ watch(() => route.params.user,
         }
 
     }
+}
+
+.infinity-loading {
+    visibility: hidden;
 }
 </style>
