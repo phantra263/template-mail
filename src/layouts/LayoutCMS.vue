@@ -7,7 +7,7 @@
                 <a-button type="primary" class="btn-refresh" @click="refreshPage">
                     <SyncOutlined />Làm mới
                 </a-button>
-                <a-input-search v-model:value="value" placeholder="Search mail..." style="width: 100%"
+                <a-input-search v-model:value="valueSearch" placeholder="Search mail..." style="width: 100%"
                     @search="onSearch" />
             </div>
 
@@ -18,7 +18,7 @@
                     :to="{ path: `/mail/${user}` }" :key="index">
                     <span>{{ user }}</span>
                 </RouterLink>
-                <InfiniteLoading @infinite="load" class="infinity-loading" />
+                <InfiniteLoading @infinite="load" v-if="!valueSearch" class="infinity-loading" />
             </a-menu>
 
 
@@ -158,6 +158,7 @@ const currentMail = ref(route.params.user || '');
 let formState = reactive({
     mailname: '',
 });
+let valueSearch = ref('');
 
 let fetchParams = {
     page: 1
@@ -241,6 +242,19 @@ const resetFormValidation = () => {
     const form = formRef.value;
     form.resetFields();
 };
+
+const onSearch = async (searchValue) => {
+    listMail.value = [];
+    try {
+        const res = await ListMailSrv.searchMail(searchValue);
+        if (res.data.msg == "success") {
+            listMail.value = res.data.data;
+        }
+    } catch (error) {
+        console.error('Error fetching tag:', error.response?.data?.detail?.msg);
+        message.error(error.response?.data?.detail?.msg);
+    }
+}
 
 onMounted(() => {
     // getListMailName();

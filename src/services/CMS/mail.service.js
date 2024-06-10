@@ -13,6 +13,9 @@ const mailSrv = {
     createMail(params) {
         return http.post(`/create-new-mail?mailname=${params}`);
     },
+    searchMail(params) {
+        return http.get(`/search?q=${params}`);
+    },
 
 }
 
