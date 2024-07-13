@@ -12,8 +12,8 @@
             <h2 v-else>Register</h2>
 
             <label for=" username">Enter your username*</label>
-            <a-form-item name="usename" :rules="[{ required: true, message: 'Please input your username!' }]">
-                <a-input v-model:value="formState.usename" />
+            <a-form-item name="username" :rules="[{ required: true, message: 'Please input your username!' }]">
+                <a-input v-model:value="formState.username" />
             </a-form-item>
 
             <label for="password">Enter your password*</label>
@@ -51,7 +51,7 @@ const loading = ref(false);
 const flagSignUp = ref(false);
 const router = useRouter();
 const formState = ref({
-    usename: '',
+    username: '',
     password: ''
 });
 const onFinish = async (values) => {
