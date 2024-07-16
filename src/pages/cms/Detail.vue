@@ -57,12 +57,30 @@ const getMailDetail = async () => {
 };
 
 const extractString = (originalString) => {
+    const isDecoded = (str) => {
+        try {
+            return str === decodeURIComponent(escape(str));
+        } catch (e) {
+            return false;
+        }
+    };
+
+    if (!isDecoded(originalString)) {
+        try {
+            originalString = decodeURIComponent(escape(originalString));
+        } catch (e) {
+            // Nếu có lỗi, trả về chuỗi gốc
+            originalString = originalString;
+        }
+    }
+
     const boundary = '--- mail_boundary ---';
     const parts = originalString.split(boundary);
     let extractedString = '';
     if (parts.length > 1) {
         extractedString = parts[1].trim();
     }
+    console.log(extractedString);
     return extractedString;
 }
 
