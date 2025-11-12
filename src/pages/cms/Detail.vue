@@ -21,7 +21,7 @@
         </div>
 
         <div class="content-mail">
-            <div v-if="mailDetail?.data" v-html="extractString(parseJSON(mailDetail?.data)?.body)"></div>
+            <div v-if="mailDetail?.data" class="email-body-content" v-html="sanitizedEmailBody"></div>
         </div>
     </div>
 </template>
@@ -31,23 +31,22 @@ import {
     PaperClipOutlined
 } from '@ant-design/icons-vue';
 import { useRoute, useRouter } from 'vue-router';
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, computed } from 'vue';
 import ListMailSrv from '../../services/CMS/mail.service';
 
 const router = useRouter();
 const route = useRoute();
 const loading = ref(false);
 const mailDetail = ref({});
-let fetchParams = {
-    mail_id: route.params.id || '',
-}
+
+const fetchParams = { mail_id: route.params.id || '' };
+
 const getMailDetail = async () => {
     loading.value = true;
     try {
         const res = await ListMailSrv.getMailDetail(fetchParams);
-        if (res.data?.msg == 'success') {
+        if (res.data?.msg === 'success') {
             mailDetail.value = res.data.data;
-            console.log(parseJSON(mailDetail.value.data));
         }
     } catch (error) {
         console.error('Error fetching:', error);
@@ -56,69 +55,148 @@ const getMailDetail = async () => {
     }
 };
 
-const extractString = (originalString) => {
-    const isDecoded = (str) => {
-        try {
-            return str === decodeURIComponent(escape(str));
-        } catch (e) {
-            return false;
-        }
-    };
+// ==================== FIX UTF-8 BỊ DECODE SAI (TIẾNG VIỆT, THÁI, NHẬT...) ====================
+const fixUtf8Misinterpreted = (str) => {
+    if (!str || typeof str !== 'string') return str;
 
-    if (!isDecoded(originalString)) {
+    // Phát hiện các ký tự Latin-1 bị nhầm (Ã, ª, º, ¸, ¹, etc.)
+    if (/[\u00C0-\u00FF][\u0080-\u00BF]/.test(str) || /Ã[-¿]/.test(str)) {
         try {
-            originalString = decodeURIComponent(escape(originalString));
+            // Chuyển từng ký tự thành byte Latin-1 → decode UTF-8 đúng
+            const bytes = Uint8Array.from(str, c => c.charCodeAt(0) & 0xFF);
+            return new TextDecoder('utf-8').decode(bytes);
         } catch (e) {
-            // Nếu có lỗi, trả về chuỗi gốc
-            originalString = originalString;
+            console.warn('UTF-8 fix failed:', e);
+        }
+    }
+    return str;
+};
+
+// ==================== PARSE MULTIPART EMAIL (ƯU TIÊN HTML) ====================
+const parseMultipart = (body, contentType) => {
+    if (!contentType || !contentType.includes('multipart')) return body;
+
+    const boundaryMatch = contentType.match(/boundary="?([^";]+)"?/i);
+    if (!boundaryMatch) return body;
+
+    const boundary = boundaryMatch[1];
+    const regex = new RegExp(`--${boundary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\r?\\n|--)`, 'g');
+    const parts = body.split(regex).filter(part => part && !part.match(/^--$/));
+
+    let html = '';
+    let text = '';
+
+    for (const part of parts) {
+        const headerEnd = part.search(/\r?\n\r?\n/);
+        if (headerEnd === -1) continue;
+
+        const headers = part.substring(0, headerEnd).toLowerCase();
+        const content = part.substring(headerEnd + 4);
+
+        if (headers.includes('text/html')) {
+            html = content;
+            break; // Ưu tiên HTML → dừng ngay
+        } else if (headers.includes('text/plain') && !text) {
+            text = content;
         }
     }
 
-    const boundary = '--- mail_boundary ---';
-    const parts = originalString.split(boundary);
-    let extractedString = '';
-    if (parts.length > 1) {
-        extractedString = parts[1].trim();
-    }
-    console.log(extractedString);
-    return extractedString;
-}
+    return html || text || body;
+};
 
-const handleBack = () => {
-    router.back();
-}
+// ==================== ESCAPE HTML (CHỐNG XSS) ====================
+const escapeHtml = (text) => {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+};
+
+// ==================== EXTRACT BODY → HTML AN TOÀN ====================
+const extractString = (rawData) => {
+    if (!rawData) return '';
+
+    let parsed;
+    try {
+        parsed = JSON.parse(rawData);
+    } catch {
+        return `<pre class="email-pre">${fixUtf8Misinterpreted(rawData)}</pre>`;
+    }
+
+    let body = parsed.body || '';
+    const contentType = parsed['content-type'] || '';
+
+    // Bước 1: Sửa lỗi encoding (hỗ trợ tiếng Việt, Thái, Nhật...)
+    body = fixUtf8Misinterpreted(body);
+
+    // Bước 2: Nếu là multipart → ưu tiên lấy phần HTML
+    if (contentType.includes('multipart')) {
+        const extracted = parseMultipart(body, contentType);
+        if (extracted.includes('<html') || extracted.includes('<table') || extracted.includes('<a ')) {
+            // Nếu là HTML → trả về luôn (đã escape)
+            return `<div class="email-html">${extracted}</div>`;
+        } else {
+            // Nếu chỉ có text → dùng <pre>
+            body = extracted;
+        }
+    }
+
+    // Bước 3: Plain text → dùng <pre> để giữ xuống dòng
+    return `<pre class="email-pre">${escapeHtml(body)}</pre>`;
+};
+
+// ==================== SANITIZE HTML (CHỐNG XSS) ====================
+const sanitizedEmailBody = computed(() => {
+    if (!mailDetail.value?.data) return '';
+
+    let html = extractString(mailDetail.value.data);
+
+    // Nếu là HTML thật → loại bỏ script, event, iframe
+    if (html.includes('<div class="email-html"')) {
+        html = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+        html = html.replace(/on\w+\s*=\s*["'][^"']*["']/gi, '');
+        html = html.replace(/javascript:/gi, '');
+        html = html.replace(/<iframe[^>]*>/gi, '');
+        html = html.replace(/<link[^>]*>/gi, '');
+    }
+
+    return html;
+});
+
+// ==================== HELPER FUNCTIONS ====================
 const parseJSON = (data) => {
-    return JSON.parse(data);
-}
+    try { return JSON.parse(data); } catch { return null; }
+};
 
 const base64ToBlob = (base64, contentType) => {
-    const byteCharacters = atob(base64);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i);
+    const byteChars = atob(base64);
+    const byteNumbers = new Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) {
+        byteNumbers[i] = byteChars.charCodeAt(i);
     }
-    const byteArray = new Uint8Array(byteNumbers);
-    return new Blob([byteArray], { type: contentType });
+    return new Blob([new Uint8Array(byteNumbers)], { type: contentType });
 };
-const createDownloadLink = (blob, filename) => {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    return link;
+
+const downloadFile = (attachment) => {
+    try {
+        const blob = base64ToBlob(attachment.payload, attachment.mail_content_type);
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = attachment.filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    } catch (err) {
+        console.error('Download failed:', err);
+    }
 };
-const downloadFile = (mailAttachment) => {
-    const blob = base64ToBlob(mailAttachment.payload, mailAttachment.mail_content_type);
-    const link = createDownloadLink(blob, mailAttachment.filename);
-    link.click();
-    setTimeout(() => {
-        URL.revokeObjectURL(link.href); // Release the memory after a short delay
-    }, 100); // Delay of 100 milliseconds
-}
-onMounted(() => {
-    getMailDetail();
-});
+
+const handleBack = () => router.back();
+
+onMounted(getMailDetail);
 </script>
+
 <style lang="scss" scoped>
 .title {
     margin-bottom: 10px;
@@ -164,6 +242,7 @@ onMounted(() => {
     padding: 10px 0;
     display: flex;
     gap: 10px;
+    flex-wrap: wrap;
 
     .btn-attach {
         padding: 10px 15px;
@@ -171,10 +250,69 @@ onMounted(() => {
         display: inline-block;
         cursor: pointer;
         border: 1px solid #eee;
+        transition: background 0.2s;
 
         &:hover {
             background: #eee;
         }
+
+        .anticon {
+            margin-right: 5px;
+        }
+    }
+}
+
+.content-mail {
+    padding: 20px 0;
+    min-height: 200px;
+}
+
+/* Reset styles cho nội dung email */
+.email-body-content {
+    padding: 0;
+    background: none;
+    border: none;
+}
+
+.email-pre {
+    white-space: pre-wrap;
+    /* Giữ xuống dòng + wrap text */
+    word-wrap: break-word;
+    /* Ngắt từ dài */
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 14.5px;
+    line-height: 1.7;
+    color: #1a1a1a;
+    margin: 0;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e0e0e0;
+    overflow-x: auto;
+
+    /* Tự động bôi đậm mã OTP nếu có */
+    strong {
+        font-weight: 600;
+        color: #d32f2f;
+    }
+
+    /* Link tự động bấm được */
+    a {
+        color: #0066cc;
+        text-decoration: underline;
+        word-break: break-all;
+    }
+
+    a:hover {
+        text-decoration: none;
+    }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .email-pre {
+        padding: 15px;
+        font-size: 14px;
     }
 }
 </style>
